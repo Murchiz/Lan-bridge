@@ -55,7 +55,7 @@ jobs:
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Compile shared module
-        run: ./gradlew shared:compileKotlinAndroid shared:compileKotlinJvm --no-daemon
+        run: ./gradlew shared:compileDebugKotlinAndroid shared:compileKotlinJvm --no-daemon
 
       - name: Compile Android app
         run: ./gradlew androidApp:compileDebugKotlin --no-daemon
