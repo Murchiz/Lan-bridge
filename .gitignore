@@ -1,7 +1,22 @@
-.gradle/
+# Built outputs
 build/
-**/build/
+*/build/
+
+# Gradle
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# IDE
 .idea/
 *.iml
 local.properties
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Kotlin
+*.class
+*.log
+*.tmp
