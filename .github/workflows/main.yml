@@ -1,6 +1,4 @@
 # .github/workflows/build.yml
-# Builds Android + Desktop on every PR and push to main.
-# Uploads APK and JARs as downloadable artifacts.
 
 name: CI Build
 
@@ -12,16 +10,13 @@ on:
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true  # Kills previous run if you push again quickly
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
 
-  # ──────────────────────────────────────────────
-  # PHASE 1: Quick compile check (fastest feedback)
-  # ──────────────────────────────────────────────
   compile-check:
     name: "🔍 Compile Check"
     runs-on: ubuntu-latest
@@ -42,23 +37,18 @@ jobs:
       - name: Ensure Gradle wrapper exists
         run: |
           if [ ! -f "./gradlew" ]; then
-            echo "::warning::gradlew not found in repo. Generating wrapper."
-            echo "⚠️ Please commit gradlew to your repo to avoid this step."
+            echo "::warning::gradlew not found — generating wrapper"
             gradle wrapper --gradle-version=8.11.1
             chmod +x ./gradlew
           fi
 
-      - name: Install Android SDK platform
+      - name: Install required Android SDK components
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            --licenses > /dev/null 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-36" \
             "build-tools;36.0.0"
-
-      - name: Validate wrapper
-        run: ./gradlew --version
-
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Compile shared module
         run: ./gradlew shared:compileDebugKotlinAndroid shared:compileKotlinDesktop --no-daemon
@@ -67,10 +57,8 @@ jobs:
         run: ./gradlew androidApp:compileDebugKotlin --no-daemon
 
       - name: Compile Desktop app
-        run: ./gradlew desktopApp:compileKotlinDesktop --no-daemon
-  # ──────────────────────────────────────────────
-  # PHASE 2: Full builds (run in parallel after compile passes)
-  # ──────────────────────────────────────────────
+        run: ./gradlew desktopApp:compileKotlin --no-daemon
+
   build-android:
     name: "📱 Build Android APK"
     needs: compile-check
@@ -89,8 +77,21 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      - name: Ensure Gradle wrapper exists
+        run: |
+          if [ ! -f "./gradlew" ]; then
+            echo "::warning::gradlew not found — generating wrapper"
+            gradle wrapper --gradle-version=8.11.1
+            chmod +x ./gradlew
+          fi
+
+      - name: Install required Android SDK components
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            --licenses > /dev/null 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
 
       - name: Build debug APK
         run: ./gradlew androidApp:assembleDebug --no-daemon
@@ -121,6 +122,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Ensure Gradle wrapper exists
+        run: |
+          if [ ! -f "./gradlew" ]; then
+            echo "::warning::gradlew not found — generating wrapper"
+            gradle wrapper --gradle-version=8.11.1
+            chmod +x ./gradlew
+          fi
+
       - name: Build uber JAR
         run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon
 
@@ -132,10 +141,9 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # Optional: also build .deb installer
       - name: Build .deb package
         run: ./gradlew desktopApp:packageDeb --no-daemon
-        continue-on-error: true  # Don't fail the build if packaging fails
+        continue-on-error: true
 
       - name: Upload .deb package
         uses: actions/upload-artifact@v4
@@ -164,6 +172,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Ensure Gradle wrapper exists
+        shell: bash
+        run: |
+          if [ ! -f "./gradlew.bat" ]; then
+            echo "::warning::gradlew.bat not found — generating wrapper"
+            gradle wrapper --gradle-version=8.11.1
+            chmod +x ./gradlew
+          fi
+
       - name: Build uber JAR
         run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon
 
@@ -175,7 +192,6 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # Optional: build .msi installer
       - name: Build .msi installer
         run: ./gradlew desktopApp:packageMsi --no-daemon
         continue-on-error: true
@@ -189,9 +205,6 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-  # ──────────────────────────────────────────────
-  # PHASE 3: Summary status check
-  # ──────────────────────────────────────────────
   build-status:
     name: "✅ Build Status"
     if: always()
