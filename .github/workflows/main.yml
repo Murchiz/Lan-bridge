@@ -67,7 +67,7 @@ jobs:
         run: ./gradlew androidApp:compileDebugKotlin --no-daemon
 
       - name: Compile Desktop app
-        run: ./gradlew desktopApp:compileKotlin --no-daemon
+        run: ./gradlew desktopApp:compileKotlinDesktop --no-daemon
   # ──────────────────────────────────────────────
   # PHASE 2: Full builds (run in parallel after compile passes)
   # ──────────────────────────────────────────────
