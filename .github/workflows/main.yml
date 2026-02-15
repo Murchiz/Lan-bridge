@@ -1,0 +1,198 @@
+# .github/workflows/build.yml
+# Builds Android + Desktop on every PR and push to main.
+# Uploads APK and JARs as downloadable artifacts.
+
+name: CI Build
+
+on:
+  pull_request:
+    branches: ['*']
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true  # Kills previous run if you push again quickly
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ──────────────────────────────────────────────
+  # PHASE 1: Quick compile check (fastest feedback)
+  # ──────────────────────────────────────────────
+  compile-check:
+    name: "🔍 Compile Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Compile shared module (all targets)
+        run: ./gradlew shared:compileKotlinAndroid shared:compileKotlinJvm --no-daemon
+
+      - name: Compile Android app
+        run: ./gradlew androidApp:compileDebugKotlin --no-daemon
+
+      - name: Compile Desktop app
+        run: ./gradlew desktopApp:compileKotlinJvm --no-daemon
+
+  # ──────────────────────────────────────────────
+  # PHASE 2: Full builds (run in parallel after compile passes)
+  # ──────────────────────────────────────────────
+  build-android:
+    name: "📱 Build Android APK"
+    needs: compile-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Build debug APK
+        run: ./gradlew androidApp:assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lanbridge-android-debug
+          path: androidApp/build/outputs/apk/debug/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+  build-desktop-linux:
+    name: "🐧 Build Desktop (Linux)"
+    needs: compile-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build uber JAR
+        run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon
+
+      - name: Upload Linux JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: lanbridge-desktop-linux
+          path: desktopApp/build/compose/jars/*.jar
+          retention-days: 30
+          if-no-files-found: error
+
+      # Optional: also build .deb installer
+      - name: Build .deb package
+        run: ./gradlew desktopApp:packageDeb --no-daemon
+        continue-on-error: true  # Don't fail the build if packaging fails
+
+      - name: Upload .deb package
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: lanbridge-desktop-linux-deb
+          path: desktopApp/build/compose/binaries/main/deb/*.deb
+          retention-days: 30
+          if-no-files-found: ignore
+
+  build-desktop-windows:
+    name: "🪟 Build Desktop (Windows)"
+    needs: compile-check
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build uber JAR
+        run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon
+
+      - name: Upload Windows JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: lanbridge-desktop-windows
+          path: desktopApp/build/compose/jars/*.jar
+          retention-days: 30
+          if-no-files-found: error
+
+      # Optional: build .msi installer
+      - name: Build .msi installer
+        run: ./gradlew desktopApp:packageMsi --no-daemon
+        continue-on-error: true
+
+      - name: Upload .msi installer
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: lanbridge-desktop-windows-msi
+          path: desktopApp/build/compose/binaries/main/msi/*.msi
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────
+  # PHASE 3: Summary status check
+  # ──────────────────────────────────────────────
+  build-status:
+    name: "✅ Build Status"
+    if: always()
+    needs: [build-android, build-desktop-linux, build-desktop-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check all builds passed
+        run: |
+          echo "Android:  ${{ needs.build-android.result }}"
+          echo "Linux:    ${{ needs.build-desktop-linux.result }}"
+          echo "Windows:  ${{ needs.build-desktop-windows.result }}"
+
+          if [[ "${{ needs.build-android.result }}" == "failure" ]] || \
+             [[ "${{ needs.build-desktop-linux.result }}" == "failure" ]] || \
+             [[ "${{ needs.build-desktop-windows.result }}" == "failure" ]]; then
+            echo "❌ One or more builds failed!"
+            exit 1
+          fi
+
+          echo "✅ All builds passed!"
