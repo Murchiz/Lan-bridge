@@ -17,7 +17,7 @@ env:
 
 jobs:
 
-    compile-check:
+  compile-check:
     name: "🔍 Compile Check"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -52,7 +52,7 @@ jobs:
 
       - name: Compile everything
         run: ./gradlew assemble --no-daemon
-
+        
   build-android:
     name: "📱 Build Android APK"
     needs: compile-check
