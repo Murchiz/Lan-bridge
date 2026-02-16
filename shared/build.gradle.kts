@@ -9,43 +9,52 @@ plugins {
 }
 
 kotlin {
-    // 1. Android Configuration moves HERE
+    // 1. Android Configuration (AGP 9.0+ KMP DSL)
     androidLibrary {
         namespace = "com.lanbridge.shared"
         compileSdk = 36
         minSdk = 26
-        // No 'compileOptions' needed here; jvmToolchain handles it.
+        // 'compileOptions' are now handled by jvmToolchain below
     }
 
+    // 2. Desktop Configuration
     jvm("desktop") {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
 
-    // 2. This controls Java compatibility for both Android and Desktop
+    // 3. Global Java Toolchain (Sets source/target compat for both Android & Desktop)
     jvmToolchain(17)
 
     sourceSets {
         commonMain.dependencies {
-            // 3. UPDATED DEPENDENCIES (No more 'compose.runtime', etc.)
+            // Compose Multiplatform (Using explicit catalog libs)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
-            implementation(libs.compose.material.icons.extended) // Or use the one defined in Step 1
-            
+            implementation(libs.compose.material.icons.extended)
+
+            // Kotlin X
             implementation(libs.jetbrains.kotlinx.coroutines.core)
             implementation(libs.jetbrains.kotlinx.serialization.json)
+
+            // Ktor
             implementation(libs.ktor.client.cio)
             implementation(libs.ktor.server.cio)
         }
 
         androidMain.dependencies {
-            // Android-specific dependencies
+            // Add Android-specific dependencies here if needed
+            // e.g., implementation(libs.androidx.core.ktx)
+        }
+
+        val desktopMain by getting {
+            dependencies {
+                implementation(libs.jetbrains.kotlinx.coroutines.swing)
+            }
         }
     }
 }
-
-// 4. REMOVED: The top-level android { } block is NOT allowed with this plugin.
