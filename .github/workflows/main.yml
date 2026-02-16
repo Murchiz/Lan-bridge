@@ -20,7 +20,7 @@ env:
 
 jobs:
 
-  compile-check:
+    compile-check:
     name: "🔍 Compile Check"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -53,25 +53,8 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0"
 
-      - name: Compile all modules
-        run: |
-          ./gradlew \
-            shared:compileDebugKotlinAndroid \
-            shared:compileKotlinDesktop \
-            androidApp:compileDebugKotlin \
-            desktopApp:compileKotlinDesktop \
-            --no-daemon
-
-      # Save Gradle build cache for other jobs to reuse
-      - name: Package build cache
-        run: tar -czf /tmp/gradle-build-cache.tar.gz -C $HOME .gradle/caches/build-cache-1/
-
-      - name: Upload build cache
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-cache
-          path: /tmp/gradle-build-cache.tar.gz
-          retention-days: 1
+      - name: Compile everything
+        run: ./gradlew assemble --no-daemon
 
   build-android:
     name: "📱 Build Android APK"
