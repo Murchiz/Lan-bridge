@@ -2,20 +2,19 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidKmpLibrary) // Now this will work!
+    alias(libs.plugins.androidKmpLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
-    // New AGP 9.0 DSL for Multiplatform
+    // 1. Android Configuration moves HERE
     androidLibrary {
         namespace = "com.lanbridge.shared"
         compileSdk = 36
         minSdk = 26
-        
-        // Built-in Kotlin automatically handles jvmTarget from compileOptions
+        // No 'compileOptions' needed here; jvmToolchain handles it.
     }
 
     jvm("desktop") {
@@ -24,16 +23,19 @@ kotlin {
         }
     }
 
+    // 2. This controls Java compatibility for both Android and Desktop
     jvmToolchain(17)
 
     sourceSets {
         commonMain.dependencies {
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.material3)
-            implementation(compose.materialIconsExtended)
-            implementation(compose.ui)
-            implementation(compose.components.resources)
+            // 3. UPDATED DEPENDENCIES (No more 'compose.runtime', etc.)
+            implementation(libs.compose.runtime)
+            implementation(libs.compose.foundation)
+            implementation(libs.compose.material3)
+            implementation(libs.compose.ui)
+            implementation(libs.compose.components.resources)
+            implementation(libs.compose.material.icons.extended) // Or use the one defined in Step 1
+            
             implementation(libs.jetbrains.kotlinx.coroutines.core)
             implementation(libs.jetbrains.kotlinx.serialization.json)
             implementation(libs.ktor.client.cio)
@@ -41,15 +43,9 @@ kotlin {
         }
 
         androidMain.dependencies {
-            // Android-specific shared logic if needed
+            // Android-specific dependencies
         }
     }
 }
 
-// Global Android settings outside the kotlin block
-android {
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-}
+// 4. REMOVED: The top-level android { } block is NOT allowed with this plugin.
