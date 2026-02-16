@@ -2,17 +2,20 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.androidMultiplatformLibrary) // <--- Use the new 2026 KMP-specific plugin
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
-    androidTarget {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
-        }
+    // New AGP 9.0 DSL for Multiplatform
+    androidLibrary {
+        namespace = "com.lanbridge.shared"
+        compileSdk = 36
+        minSdk = 26
+        
+        // Built-in Kotlin automatically handles jvmTarget from compileOptions
     }
 
     jvm("desktop") {
@@ -37,24 +40,14 @@ kotlin {
             implementation(libs.ktor.server.cio)
         }
 
-        commonTest.dependencies {
-            implementation(kotlin("test"))
+        androidMain.dependencies {
+            // Android-specific shared logic if needed
         }
     }
 }
 
+// Global Android settings outside the kotlin block
 android {
-    namespace = "com.lanbridge.shared"
-    compileSdk = 36
-
-    defaultConfig {
-        minSdk = 26
-    }
-
-    buildFeatures {
-        compose = true
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
