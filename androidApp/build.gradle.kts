@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.androidApplication)
-    // REMOVE: alias(libs.plugins.kotlinAndroid) <--- This is now built-in!
+    // REMOVED: Kotlin Android plugin (now built-in to AGP 9)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
 }
@@ -13,22 +13,37 @@ android {
         applicationId = "com.lanbridge.android"
         minSdk = 26
         targetSdk = 36
-        // ...
+        versionCode = 1
+        versionName = "0.1.0"
     }
 
-    // Since you aren't applying the Kotlin plugin, 
-    // use the android-native way to set the JVM target
-    kotlinOptions {
-        jvmTarget = "17"
+    buildFeatures {
+        compose = true
     }
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // With AGP 9, jvmTarget is automatically synced with 
+    // targetCompatibility above, so no extra 'kotlinOptions' needed!
 }
 
 dependencies {
     implementation(projects.shared)
-    // ... rest of your dependencies
+    
+    // Compose Multiplatform libraries
+    implementation(compose.ui)
+    implementation(compose.material3)
+    implementation(compose.foundation)
+    implementation(compose.materialIconsExtended)
+    
+    // Android-specific wrappers
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
 }
