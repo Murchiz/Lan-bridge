@@ -1,35 +1,8 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.androidApplication)
-    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.kotlinAndroid) // <--- CHANGED: Use Android plugin, not Multiplatform
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
-}
-
-kotlin {
-    androidTarget {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
-        }
-    }
-
-    jvmToolchain(17)
-
-    sourceSets {
-        androidMain.dependencies {
-            implementation(project(":shared"))
-            implementation(compose.ui)
-            implementation(compose.material3)
-            implementation(compose.foundation)
-            implementation(compose.materialIconsExtended)
-            implementation(libs.androidx.compose.ui.tooling.preview)
-            implementation(libs.androidx.activity.compose)
-            implementation(libs.androidx.core.ktx)
-            implementation(libs.androidx.lifecycle.runtime.ktx)
-            implementation(libs.androidx.lifecycle.runtime.compose)
-        }
-    }
 }
 
 android {
@@ -48,6 +21,16 @@ android {
         compose = true
     }
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Standard way to set Kotlin JVM target in an Android module
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -57,13 +40,25 @@ android {
             )
         }
     }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
 }
 
+// Move dependencies from 'sourceSets' to the top-level block
 dependencies {
+    implementation(projects.shared) // Access your shared module
+
+    // Compose Multiplatform Dependencies (automatically map to Android variants)
+    implementation(compose.ui)
+    implementation(compose.material3)
+    implementation(compose.foundation)
+    implementation(compose.materialIconsExtended)
+    
+    // Android Specific Dependencies
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+
+    // Previews & Tooling
+    implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
