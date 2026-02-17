@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BottomAppBar
@@ -60,6 +61,7 @@ import com.lanbridge.model.Device
 import com.lanbridge.model.DevicePlatform
 import com.lanbridge.model.TransferRecord
 import com.lanbridge.model.TransferStatus
+import com.lanbridge.network.NetworkConstants
 import com.lanbridge.viewmodel.ContentState
 import com.lanbridge.viewmodel.LanBridgeTab
 import com.lanbridge.viewmodel.LanBridgeViewModel
@@ -80,6 +82,7 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showManualDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.statusBanner) {
         if (uiState.statusBanner.isNotBlank()) {
@@ -93,7 +96,7 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
                 title = { Text(text = "LanBridge") },
                 actions = {
                     Text(
-                        text = "Phase 1",
+                        text = "Phase 2",
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
@@ -103,12 +106,8 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         floatingActionButton = {
             if (uiState.selectedTab == LanBridgeTab.Devices) {
-                FloatingActionButton(
-                    onClick = {
-                        viewModel.pushMessage("Send file coming soon")
-                    }
-                ) {
-                    Icon(Icons.Filled.Send, contentDescription = "Send")
+                FloatingActionButton(onClick = { showManualDialog = true }) {
+                    Icon(Icons.Filled.Send, contentDescription = "Add manually")
                 }
             }
         },
@@ -137,23 +136,15 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
     ) { innerPadding ->
         Surface(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "LAN status: ${uiState.statusBanner}", style = MaterialTheme.typography.bodyMedium)
-                    OutlinedButton(onClick = { viewModel.resetMockData() }) {
-                        Text("Reset mock")
-                    }
-                }
+                Text(text = "LAN status: ${uiState.statusBanner}", style = MaterialTheme.typography.bodyMedium)
 
                 when (uiState.selectedTab) {
                     LanBridgeTab.Devices -> DevicesTab(
                         state = uiState.devicesState,
                         devices = uiState.devices,
                         onStateChange = viewModel::setDevicesState,
-                        onActionMessage = viewModel::pushMessage
+                        onActionMessage = viewModel::pushMessage,
+                        onAddManualClick = { showManualDialog = true }
                     )
 
                     LanBridgeTab.Transfers -> TransfersTab(
@@ -185,6 +176,16 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
             }
         }
     }
+
+    if (showManualDialog) {
+        ManualDeviceDialog(
+            onDismiss = { showManualDialog = false },
+            onAdd = { ip, port ->
+                viewModel.addManualDevice(ipAddress = ip, portText = port)
+                showManualDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -192,19 +193,55 @@ private fun DevicesTab(
     state: ContentState,
     devices: List<Device>,
     onStateChange: (ContentState) -> Unit,
-    onActionMessage: (String) -> Unit
+    onActionMessage: (String) -> Unit,
+    onAddManualClick: () -> Unit
 ) {
     ContentStateSwitcher(current = state, onStateChange = onStateChange)
     when (state) {
         ContentState.Loading -> LoadingState("Scanning local network...")
-        ContentState.Empty -> EmptyState("No nearby devices yet")
+        ContentState.Empty -> {
+            EmptyState("No nearby devices yet")
+            OutlinedButton(onClick = onAddManualClick) { Text("Add manually") }
+        }
         ContentState.Error -> ErrorState("Unable to scan Wi-Fi. Check connection.")
         ContentState.Populated -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(devices, key = { it.id }) { device ->
                 DeviceCard(device = device, onSendClick = { onActionMessage("Send to ${device.name} coming soon") })
             }
+            item {
+                OutlinedButton(onClick = onAddManualClick, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add manually")
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun ManualDeviceDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
+    var ipAddress by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf(NetworkConstants.TransferServerFallbackPort.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add device manually") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = ipAddress, onValueChange = { ipAddress = it }, label = { Text("IP address") })
+                OutlinedTextField(value = port, onValueChange = { port = it }, label = { Text("Port") })
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onAdd(ipAddress, port) }) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -276,7 +313,7 @@ private fun SettingsTab(
                         Switch(checked = forceDarkTheme, onCheckedChange = { onThemeToggle() })
                     }
                     HorizontalDivider()
-                    Text("LanBridge v0.1.0", style = MaterialTheme.typography.labelLarge)
+                    Text("LanBridge v0.2.0", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -307,7 +344,7 @@ private fun DeviceCard(device: Device, onSendClick: () -> Unit) {
                         Text(text = "${device.ipAddress}:${device.serverPort}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Badge { Text(device.platform.name.lowercase()) }
+                Badge { Text(if (device.isManual) "manual" else device.platform.name.lowercase()) }
             }
             Button(onClick = onSendClick) {
                 Text("Send File")

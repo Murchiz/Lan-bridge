@@ -15,4 +15,9 @@ class MainActivity : ComponentActivity() {
             LanBridgeRoot(viewModel = viewModel)
         }
     }
+
+    override fun onDestroy() {
+        viewModel.close()
+        super.onDestroy()
+    }
 }

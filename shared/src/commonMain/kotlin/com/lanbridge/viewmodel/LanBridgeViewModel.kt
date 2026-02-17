@@ -1,24 +1,61 @@
 package com.lanbridge.viewmodel
 
 import com.lanbridge.model.Device
-import com.lanbridge.model.DevicePlatform
 import com.lanbridge.model.TransferDirection
 import com.lanbridge.model.TransferRecord
 import com.lanbridge.model.TransferStatus
+import com.lanbridge.network.DeviceDiscoveryManager
+import com.lanbridge.network.NetworkConstants
+import com.lanbridge.network.defaultDeviceName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class LanBridgeViewModel {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val discoveryManager = DeviceDiscoveryManager(serverPort = 8294)
+
     private val _uiState = MutableStateFlow(
         LanBridgeUiState(
-            devices = sampleDevices(),
+            devices = emptyList(),
             transfers = sampleTransfers(),
             selectedTab = LanBridgeTab.Devices,
-            statusBanner = "Ready on local network"
+            statusBanner = "Ready on local network",
+            deviceName = defaultDeviceName()
         )
     )
     val uiState: StateFlow<LanBridgeUiState> = _uiState.asStateFlow()
+
+    init {
+        discoveryManager.start(deviceName = _uiState.value.deviceName)
+
+        scope.launch {
+            discoveryManager.devices.collect { devices ->
+                _uiState.update {
+                    it.copy(
+                        devices = devices,
+                        devicesState = if (devices.isEmpty()) ContentState.Empty else ContentState.Populated
+                    )
+                }
+            }
+        }
+
+        scope.launch {
+            discoveryManager.errorEvents.collect { error ->
+                if (!error.isNullOrBlank()) {
+                    pushMessage(error)
+                    discoveryManager.clearError()
+                }
+            }
+        }
+    }
 
     fun selectTab(tab: LanBridgeTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
@@ -41,7 +78,13 @@ class LanBridgeViewModel {
     }
 
     fun updateDeviceName(name: String) {
-        _uiState.value = _uiState.value.copy(deviceName = name)
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            pushMessage("Device name cannot be empty")
+            return
+        }
+        _uiState.value = _uiState.value.copy(deviceName = trimmed)
+        restartDiscovery()
     }
 
     fun toggleAutoAccept() {
@@ -52,42 +95,25 @@ class LanBridgeViewModel {
         _uiState.value = _uiState.value.copy(forceDarkTheme = !_uiState.value.forceDarkTheme)
     }
 
-    fun resetMockData() {
-        _uiState.value = _uiState.value.copy(
-            devices = sampleDevices(),
-            transfers = sampleTransfers(),
-            statusBanner = "Mock data restored"
-        )
+    fun addManualDevice(ipAddress: String, portText: String) {
+        scope.launch {
+            val port = portText.toIntOrNull() ?: NetworkConstants.TransferServerFallbackPort
+            discoveryManager.addManualDevice(ip = ipAddress, port = port)
+            pushMessage("Added manual device $ipAddress:$port")
+        }
     }
 
-    private fun sampleDevices(): List<Device> {
-        val now = System.currentTimeMillis()
-        return listOf(
-            Device(
-                id = "dev-android-1",
-                name = "Pixel 8 Pro",
-                ipAddress = "192.168.1.42",
-                platform = DevicePlatform.ANDROID,
-                serverPort = 8294,
-                lastSeenEpochMillis = now
-            ),
-            Device(
-                id = "dev-win-1",
-                name = "Office Desktop",
-                ipAddress = "192.168.1.18",
-                platform = DevicePlatform.WINDOWS,
-                serverPort = 8294,
-                lastSeenEpochMillis = now
-            ),
-            Device(
-                id = "dev-linux-1",
-                name = "Ubuntu Laptop",
-                ipAddress = "192.168.1.77",
-                platform = DevicePlatform.LINUX,
-                serverPort = 8294,
-                lastSeenEpochMillis = now
-            )
-        )
+    private fun restartDiscovery() {
+        scope.launch {
+            discoveryManager.stop()
+            discoveryManager.start(deviceName = _uiState.value.deviceName)
+            pushMessage("Discovery restarted")
+        }
+    }
+
+    fun close() {
+        discoveryManager.close()
+        scope.cancel()
     }
 
     private fun sampleTransfers(): List<TransferRecord> {
@@ -128,11 +154,11 @@ data class LanBridgeUiState(
     val selectedTab: LanBridgeTab,
     val devices: List<Device>,
     val transfers: List<TransferRecord>,
-    val devicesState: ContentState = ContentState.Populated,
+    val devicesState: ContentState = ContentState.Loading,
     val transfersState: ContentState = ContentState.Populated,
     val settingsState: ContentState = ContentState.Populated,
     val statusBanner: String,
-    val deviceName: String = "My Device",
+    val deviceName: String,
     val saveLocation: String = "~/LanBridge",
     val autoAcceptTransfers: Boolean = true,
     val forceDarkTheme: Boolean = false

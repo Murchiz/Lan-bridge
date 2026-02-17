@@ -9,9 +9,11 @@ data class Device(
     val ipAddress: String,
     val platform: DevicePlatform,
     val serverPort: Int,
-    val lastSeenEpochMillis: Long
+    val lastSeenEpochMillis: Long,
+    val isManual: Boolean = false
 )
 
+@Serializable
 enum class DevicePlatform {
     ANDROID,
     WINDOWS,
