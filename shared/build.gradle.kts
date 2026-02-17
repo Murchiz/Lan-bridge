@@ -47,8 +47,7 @@ kotlin {
         }
 
         androidMain.dependencies {
-            // Add Android-specific dependencies here if needed
-            // e.g., implementation(libs.androidx.core.ktx)
+            implementation(libs.jetbrains.kotlinx.coroutines.android)
         }
 
         val desktopMain by getting {
