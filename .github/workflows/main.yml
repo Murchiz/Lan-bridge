@@ -1,4 +1,5 @@
 name: CI Build
+
 on:
   pull_request:
     branches: ['*']
@@ -13,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.caching=true"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
 jobs:
 
@@ -52,7 +53,7 @@ jobs:
 
       - name: Compile everything
         run: ./gradlew assemble --no-daemon
-        
+
   build-android:
     name: "📱 Build Android APK"
     needs: compile-check
@@ -86,20 +87,8 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0"
 
-      # Restore build cache from compile-check
-      - name: Download build cache
-        uses: actions/download-artifact@v4
-        with:
-          name: gradle-build-cache
-          path: /tmp
-
-      - name: Restore build cache
-        run: |
-          mkdir -p $HOME/.gradle/caches/build-cache-1/
-          tar -xzf /tmp/gradle-build-cache.tar.gz -C $HOME .gradle/caches/build-cache-1/ || true
-
       - name: Build debug APK
-        run: ./gradlew androidApp:assembleDebug --no-daemon --build-cache
+        run: ./gradlew androidApp:assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -134,19 +123,8 @@ jobs:
             chmod +x ./gradlew
           fi
 
-      - name: Download build cache
-        uses: actions/download-artifact@v4
-        with:
-          name: gradle-build-cache
-          path: /tmp
-
-      - name: Restore build cache
-        run: |
-          mkdir -p $HOME/.gradle/caches/build-cache-1/
-          tar -xzf /tmp/gradle-build-cache.tar.gz -C $HOME .gradle/caches/build-cache-1/ || true
-
       - name: Build uber JAR
-        run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon --build-cache
+        run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon
 
       - name: Upload Linux JAR
         uses: actions/upload-artifact@v4
@@ -156,16 +134,16 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      - name: Build .deb package
-        run: ./gradlew desktopApp:packageDeb --no-daemon --build-cache
+      - name: Build native package
+        run: ./gradlew desktopApp:createDistributable --no-daemon
         continue-on-error: true
 
-      - name: Upload .deb package
+      - name: Upload native package
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: lanbridge-desktop-linux-deb
-          path: desktopApp/build/compose/binaries/main/deb/*.deb
+          name: lanbridge-desktop-linux-distributable
+          path: desktopApp/build/compose/binaries/main/app/
           retention-days: 30
           if-no-files-found: ignore
 
@@ -195,9 +173,6 @@ jobs:
             chmod +x ./gradlew
           fi
 
-      # Windows can't reuse Linux build cache (different OS, different paths)
-      # It still benefits from Gradle's cross-run dependency cache via setup-gradle
-
       - name: Build uber JAR
         run: ./gradlew desktopApp:packageUberJarForCurrentOS --no-daemon
 
@@ -209,16 +184,16 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      - name: Build .msi installer
-        run: ./gradlew desktopApp:packageMsi --no-daemon
+      - name: Build native package
+        run: ./gradlew desktopApp:createDistributable --no-daemon
         continue-on-error: true
 
-      - name: Upload .msi installer
+      - name: Upload native package
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: lanbridge-desktop-windows-msi
-          path: desktopApp/build/compose/binaries/main/msi/*.msi
+          name: lanbridge-desktop-windows-distributable
+          path: desktopApp/build/compose/binaries/main/app/
           retention-days: 30
           if-no-files-found: ignore
 
