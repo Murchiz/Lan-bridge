@@ -1,10 +1,12 @@
 package com.lanbridge.network
 
 import android.net.Uri
+import android.os.Environment
 import android.provider.OpenableColumns
 import com.lanbridge.model.SelectedFileMeta
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 actual object PlatformFileAccess {
     actual suspend fun readMetadata(fileReference: String): Result<SelectedFileMeta> {
@@ -46,6 +48,47 @@ actual object PlatformFileAccess {
                     input.readBytes()
                 } ?: error("Unable to open selected file")
             }
+        }
+    }
+
+    actual suspend fun saveIncomingFile(fileName: String, data: ByteArray): Result<String> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val dir = File(defaultSaveDirectory())
+                if (!dir.exists()) {
+                    dir.mkdirs()
+                }
+                val output = uniqueDestination(dir, fileName)
+                output.outputStream().use { stream ->
+                    stream.write(data)
+                    stream.flush()
+                }
+                output.absolutePath
+            }
+        }
+    }
+
+    actual fun defaultSaveDirectory(): String {
+        val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        return File(downloads, "LanBridge").absolutePath
+    }
+
+    private fun uniqueDestination(dir: File, name: String): File {
+        val base = File(dir, name)
+        if (!base.exists()) {
+            return base
+        }
+
+        val dotIndex = name.lastIndexOf('.')
+        val stem = if (dotIndex > 0) name.substring(0, dotIndex) else name
+        val ext = if (dotIndex > 0) name.substring(dotIndex) else ""
+        var counter = 1
+        while (true) {
+            val candidate = File(dir, "$stem-$counter$ext")
+            if (!candidate.exists()) {
+                return candidate
+            }
+            counter += 1
         }
     }
 }

@@ -31,4 +31,42 @@ actual object PlatformFileAccess {
             }
         }
     }
+
+    actual suspend fun saveIncomingFile(fileName: String, data: ByteArray): Result<String> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val dir = File(defaultSaveDirectory())
+                if (!dir.exists()) {
+                    dir.mkdirs()
+                }
+                val output = uniqueDestination(dir, fileName)
+                output.outputStream().use { stream ->
+                    stream.write(data)
+                    stream.flush()
+                }
+                output.absolutePath
+            }
+        }
+    }
+
+    actual fun defaultSaveDirectory(): String = File(System.getProperty("user.home"), "LanBridge").absolutePath
+
+    private fun uniqueDestination(dir: File, name: String): File {
+        val base = File(dir, name)
+        if (!base.exists()) {
+            return base
+        }
+
+        val dotIndex = name.lastIndexOf('.')
+        val stem = if (dotIndex > 0) name.substring(0, dotIndex) else name
+        val ext = if (dotIndex > 0) name.substring(dotIndex) else ""
+        var counter = 1
+        while (true) {
+            val candidate = File(dir, "$stem-$counter$ext")
+            if (!candidate.exists()) {
+                return candidate
+            }
+            counter += 1
+        }
+    }
 }
