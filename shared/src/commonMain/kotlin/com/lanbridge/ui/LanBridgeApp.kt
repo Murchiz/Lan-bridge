@@ -1,16 +1,11 @@
 package com.lanbridge.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -24,15 +19,14 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Badge
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -40,7 +34,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -50,7 +43,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,23 +57,28 @@ import com.lanbridge.network.NetworkConstants
 import com.lanbridge.viewmodel.ContentState
 import com.lanbridge.viewmodel.LanBridgeTab
 import com.lanbridge.viewmodel.LanBridgeViewModel
-import kotlinx.coroutines.launch
+import com.lanbridge.viewmodel.progressText
 
 @Composable
-fun LanBridgeRoot(viewModel: LanBridgeViewModel) {
+fun LanBridgeRoot(
+    viewModel: LanBridgeViewModel,
+    onPickFileForDevice: (Device, (String?) -> Unit) -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
     val colorScheme = if (uiState.forceDarkTheme) darkColorSchemeLanBridge() else lightColorSchemeLanBridge()
     MaterialTheme(colorScheme = colorScheme) {
-        LanBridgeScreen(viewModel = viewModel)
+        LanBridgeScreen(viewModel = viewModel, onPickFileForDevice = onPickFileForDevice)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
+private fun LanBridgeScreen(
+    viewModel: LanBridgeViewModel,
+    onPickFileForDevice: (Device, (String?) -> Unit) -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var showManualDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.statusBanner) {
@@ -96,7 +93,7 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
                 title = { Text(text = "LanBridge") },
                 actions = {
                     Text(
-                        text = "Phase 2",
+                        text = "Phase 3",
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
@@ -104,13 +101,6 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        floatingActionButton = {
-            if (uiState.selectedTab == LanBridgeTab.Devices) {
-                FloatingActionButton(onClick = { showManualDialog = true }) {
-                    Icon(Icons.Filled.Send, contentDescription = "Add manually")
-                }
-            }
-        },
         bottomBar = {
             BottomAppBar {
                 NavigationBarItem(
@@ -134,45 +124,50 @@ private fun LanBridgeScreen(viewModel: LanBridgeViewModel) {
             }
         }
     ) { innerPadding ->
-        Surface(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(text = "LAN status: ${uiState.statusBanner}", style = MaterialTheme.typography.bodyMedium)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            when (uiState.selectedTab) {
+                LanBridgeTab.Devices -> DevicesTab(
+                    state = uiState.devicesState,
+                    devices = uiState.devices,
+                    onStateChange = viewModel::setDevicesState,
+                    onActionMessage = viewModel::pushMessage,
+                    onAddManualClick = { showManualDialog = true },
+                    onSendToDevice = { device ->
+                        onPickFileForDevice(device) { fileReference ->
+                            if (fileReference != null) {
+                                viewModel.sendFileToDevice(device, fileReference)
+                            } else {
+                                viewModel.pushMessage("File selection canceled")
+                            }
+                        }
+                    }
+                )
 
-                when (uiState.selectedTab) {
-                    LanBridgeTab.Devices -> DevicesTab(
-                        state = uiState.devicesState,
-                        devices = uiState.devices,
-                        onStateChange = viewModel::setDevicesState,
-                        onActionMessage = viewModel::pushMessage,
-                        onAddManualClick = { showManualDialog = true }
-                    )
+                LanBridgeTab.Transfers -> TransfersTab(
+                    state = uiState.transfersState,
+                    transfers = uiState.transfers,
+                    onStateChange = viewModel::setTransfersState,
+                    onActionMessage = viewModel::pushMessage
+                )
 
-                    LanBridgeTab.Transfers -> TransfersTab(
-                        state = uiState.transfersState,
-                        transfers = uiState.transfers,
-                        onStateChange = viewModel::setTransfersState,
-                        onActionMessage = viewModel::pushMessage
-                    )
-
-                    LanBridgeTab.Settings -> SettingsTab(
-                        state = uiState.settingsState,
-                        deviceName = uiState.deviceName,
-                        saveLocation = uiState.saveLocation,
-                        autoAcceptTransfers = uiState.autoAcceptTransfers,
-                        forceDarkTheme = uiState.forceDarkTheme,
-                        onStateChange = viewModel::setSettingsState,
-                        onDeviceNameChanged = viewModel::updateDeviceName,
-                        onAutoAcceptToggle = {
-                            viewModel.toggleAutoAccept()
-                            scope.launch { snackbarHostState.showSnackbar("Auto-accept toggled") }
-                        },
-                        onThemeToggle = {
-                            viewModel.toggleDarkTheme()
-                            scope.launch { snackbarHostState.showSnackbar("Theme toggled") }
-                        },
-                        onActionMessage = viewModel::pushMessage
-                    )
-                }
+                LanBridgeTab.Settings -> SettingsTab(
+                    state = uiState.settingsState,
+                    deviceName = uiState.deviceName,
+                    saveLocation = uiState.saveLocation,
+                    autoAcceptTransfers = uiState.autoAcceptTransfers,
+                    forceDarkTheme = uiState.forceDarkTheme,
+                    onStateChange = viewModel::setSettingsState,
+                    onDeviceNameChanged = viewModel::updateDeviceName,
+                    onAutoAcceptToggle = viewModel::toggleAutoAccept,
+                    onThemeToggle = viewModel::toggleDarkTheme,
+                    onActionMessage = viewModel::pushMessage
+                )
             }
         }
     }
@@ -194,7 +189,8 @@ private fun DevicesTab(
     devices: List<Device>,
     onStateChange: (ContentState) -> Unit,
     onActionMessage: (String) -> Unit,
-    onAddManualClick: () -> Unit
+    onAddManualClick: () -> Unit,
+    onSendToDevice: (Device) -> Unit
 ) {
     ContentStateSwitcher(current = state, onStateChange = onStateChange)
     when (state) {
@@ -206,7 +202,10 @@ private fun DevicesTab(
         ContentState.Error -> ErrorState("Unable to scan Wi-Fi. Check connection.")
         ContentState.Populated -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(devices, key = { it.id }) { device ->
-                DeviceCard(device = device, onSendClick = { onActionMessage("Send to ${device.name} coming soon") })
+                DeviceCard(device = device, onSendClick = {
+                    onActionMessage("Choose a file for ${device.name}")
+                    onSendToDevice(device)
+                })
             }
             item {
                 OutlinedButton(onClick = onAddManualClick, modifier = Modifier.fillMaxWidth()) {
@@ -313,7 +312,7 @@ private fun SettingsTab(
                         Switch(checked = forceDarkTheme, onCheckedChange = { onThemeToggle() })
                     }
                     HorizontalDivider()
-                    Text("LanBridge v0.2.0", style = MaterialTheme.typography.labelLarge)
+                    Text("LanBridge v0.3.0", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -322,32 +321,17 @@ private fun SettingsTab(
 
 @Composable
 private fun DeviceCard(device: Device, onSendClick: () -> Unit) {
-    val icon = when (device.platform) {
-        DevicePlatform.ANDROID -> Icons.Filled.PhoneAndroid
-        DevicePlatform.WINDOWS,
-        DevicePlatform.LINUX,
-        DevicePlatform.UNKNOWN -> Icons.Filled.Computer
-    }
-
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(icon, contentDescription = device.platform.name)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(text = device.name, fontWeight = FontWeight.Bold)
-                        Text(text = "${device.ipAddress}:${device.serverPort}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                Badge { Text(if (device.isManual) "manual" else device.platform.name.lowercase()) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(platformIcon(device.platform), contentDescription = null)
+                Text(device.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                AssistChip(onClick = {}, label = { Text(device.platform.name.lowercase()) })
             }
+            Text("${device.ipAddress}:${device.serverPort}", style = MaterialTheme.typography.bodyMedium)
             Button(onClick = onSendClick) {
-                Text("Send File")
+                Icon(Icons.Filled.Send, contentDescription = null)
+                Text("Send file", modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
@@ -357,106 +341,75 @@ private fun DeviceCard(device: Device, onSendClick: () -> Unit) {
 private fun TransferCard(transfer: TransferRecord, onActionMessage: (String) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = transfer.fileName, fontWeight = FontWeight.Bold)
-            Text(text = "${formatSize(transfer.fileSizeBytes)} • ${transfer.peerName}")
-            androidx.compose.material3.LinearProgressIndicator(progress = { transfer.progress })
+            Text(transfer.fileName, style = MaterialTheme.typography.titleMedium)
+            Text("${transfer.peerName} • ${transfer.progressText()}")
+            LinearProgressIndicator(progress = { transfer.progress }, modifier = Modifier.fillMaxWidth())
+            Text("${transfer.fileSizeBytes} bytes")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                TransferStatusChip(status = transfer.status)
-                OutlinedButton(onClick = { onActionMessage("Clicked ${transfer.fileName}") }) {
-                    Text("Details")
+                Icon(statusIcon(transfer.status), contentDescription = null)
+                Text(transfer.status.name.lowercase())
+            }
+            if (!transfer.errorMessage.isNullOrBlank()) {
+                Text(transfer.errorMessage, color = MaterialTheme.colorScheme.error)
+            }
+            if (transfer.status == TransferStatus.FAILED) {
+                OutlinedButton(onClick = { onActionMessage("Retry support is coming in Phase 5") }) {
+                    Text("Retry")
                 }
             }
-            transfer.errorMessage?.let {
-                Text(text = it, color = MaterialTheme.colorScheme.error)
-            }
         }
     }
-}
-
-@Composable
-private fun TransferStatusChip(status: TransferStatus) {
-    val label: String
-    val icon: ImageVector
-    when (status) {
-        TransferStatus.QUEUED -> {
-            label = "Queued"
-            icon = Icons.Filled.History
-        }
-        TransferStatus.IN_PROGRESS -> {
-            label = "In Progress"
-            icon = Icons.Filled.Send
-        }
-        TransferStatus.COMPLETED -> {
-            label = "Completed"
-            icon = Icons.Filled.CheckCircle
-        }
-        TransferStatus.FAILED -> {
-            label = "Failed"
-            icon = Icons.Filled.Error
-        }
-        TransferStatus.CANCELLED -> {
-            label = "Cancelled"
-            icon = Icons.Filled.Error
-        }
-    }
-    AssistChip(onClick = {}, label = { Text(label) }, leadingIcon = { Icon(icon, contentDescription = label) })
 }
 
 @Composable
 private fun ContentStateSwitcher(current: ContentState, onStateChange: (ContentState) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StateButton("Loading", current == ContentState.Loading) { onStateChange(ContentState.Loading) }
-        StateButton("Empty", current == ContentState.Empty) { onStateChange(ContentState.Empty) }
-        StateButton("Error", current == ContentState.Error) { onStateChange(ContentState.Error) }
-        StateButton("Data", current == ContentState.Populated) { onStateChange(ContentState.Populated) }
-    }
-}
-
-@Composable
-private fun StateButton(text: String, selected: Boolean, onClick: () -> Unit) {
-    if (selected) {
-        Button(onClick = onClick) { Text(text) }
-    } else {
-        OutlinedButton(onClick = onClick) { Text(text) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("State:")
+        listOf(ContentState.Loading, ContentState.Empty, ContentState.Error, ContentState.Populated).forEach { state ->
+            OutlinedButton(onClick = { onStateChange(state) }) {
+                Text(state.name.lowercase())
+            }
+        }
+        Text("Current ${current.name.lowercase()}")
     }
 }
 
 @Composable
 private fun LoadingState(message: String) {
-    Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CircularProgressIndicator()
-            Text(message)
-        }
-    }
-}
-
-@Composable
-private fun EmptyState(message: String) {
-    Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CircularProgressIndicator()
         Text(message)
     }
 }
 
 @Composable
+private fun EmptyState(message: String) {
+    Text(message, style = MaterialTheme.typography.bodyLarge)
+}
+
+@Composable
 private fun ErrorState(message: String) {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(220.dp)
-            .background(MaterialTheme.colorScheme.errorContainer),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(Icons.Filled.Error, contentDescription = null)
+        Text(message, color = MaterialTheme.colorScheme.error)
     }
 }
 
-private fun formatSize(bytes: Long): String {
-    val kb = 1024.0
-    val mb = kb * 1024
-    val gb = mb * 1024
-    return when {
-        bytes >= gb -> "%.2f GB".format(bytes / gb)
-        bytes >= mb -> "%.2f MB".format(bytes / mb)
-        bytes >= kb -> "%.2f KB".format(bytes / kb)
-        else -> "$bytes B"
+private fun platformIcon(platform: DevicePlatform): ImageVector {
+    return when (platform) {
+        DevicePlatform.ANDROID -> Icons.Filled.PhoneAndroid
+        DevicePlatform.WINDOWS,
+        DevicePlatform.LINUX,
+        DevicePlatform.UNKNOWN -> Icons.Filled.Computer
+    }
+}
+
+private fun statusIcon(status: TransferStatus): ImageVector {
+    return when (status) {
+        TransferStatus.COMPLETED -> Icons.Filled.CheckCircle
+        TransferStatus.FAILED,
+        TransferStatus.CANCELLED -> Icons.Filled.Error
+        TransferStatus.QUEUED,
+        TransferStatus.IN_PROGRESS -> Icons.Filled.History
     }
 }
