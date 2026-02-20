@@ -10,6 +10,7 @@ import com.lanbridge.network.FileTransferManager
 import com.lanbridge.network.NetworkConstants
 import com.lanbridge.network.PlatformFileAccess
 import com.lanbridge.network.PlatformTransferHistoryStore
+import com.lanbridge.network.PlatformTime
 import com.lanbridge.network.TransferServerManager
 import com.lanbridge.network.defaultDeviceName
 import kotlinx.coroutines.CoroutineScope
@@ -490,4 +491,4 @@ fun TransferRecord.speedText(): String {
     return "$whole.${fraction.toString().padStart(2, '0')} MB/s"
 }
 
-private fun currentTimeMillis(): Long = kotlin.system.getTimeMillis()
+private fun currentTimeMillis(): Long = PlatformTime.currentTimeMillis()
