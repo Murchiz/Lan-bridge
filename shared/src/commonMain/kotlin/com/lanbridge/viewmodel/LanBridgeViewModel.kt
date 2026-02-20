@@ -1,6 +1,7 @@
 package com.lanbridge.viewmodel
 
 import com.lanbridge.model.Device
+import com.lanbridge.model.IncomingTransferUpdate
 import com.lanbridge.model.TransferDirection
 import com.lanbridge.model.TransferRecord
 import com.lanbridge.model.TransferStatus
@@ -8,6 +9,7 @@ import com.lanbridge.network.DeviceDiscoveryManager
 import com.lanbridge.network.FileTransferManager
 import com.lanbridge.network.NetworkConstants
 import com.lanbridge.network.PlatformFileAccess
+import com.lanbridge.network.TransferServerManager
 import com.lanbridge.network.defaultDeviceName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,7 @@ class LanBridgeViewModel {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val discoveryManager = DeviceDiscoveryManager(serverPort = 8294)
     private val transferManager = FileTransferManager()
+    private val transferServerManager = TransferServerManager()
 
     private val _uiState = MutableStateFlow(
         LanBridgeUiState(
@@ -34,12 +37,17 @@ class LanBridgeViewModel {
             selectedTab = LanBridgeTab.Devices,
             statusBanner = "Ready on local network",
             deviceName = defaultDeviceName(),
+            saveLocation = PlatformFileAccess.defaultSaveDirectory(),
             transfersState = ContentState.Empty
         )
     )
     val uiState: StateFlow<LanBridgeUiState> = _uiState.asStateFlow()
 
     init {
+        transferServerManager.start(NetworkConstants.TransferServerFallbackPort)
+            .onFailure { pushMessage("Server start failed: ${it.message}") }
+            .onSuccess { pushMessage("Receiving on port ${NetworkConstants.TransferServerFallbackPort}") }
+
         discoveryManager.start(deviceName = _uiState.value.deviceName)
 
         scope.launch {
@@ -59,6 +67,18 @@ class LanBridgeViewModel {
                     pushMessage(error)
                     discoveryManager.clearError()
                 }
+            }
+        }
+
+        scope.launch {
+            transferServerManager.incomingTransfers.collect { update ->
+                applyIncomingTransfer(update)
+            }
+        }
+
+        scope.launch {
+            transferServerManager.errors.collect { error ->
+                pushMessage(error)
             }
         }
     }
@@ -157,6 +177,51 @@ class LanBridgeViewModel {
         }
     }
 
+    private fun applyIncomingTransfer(update: IncomingTransferUpdate) {
+        val existing = _uiState.value.transfers.any { it.id == update.id }
+        if (!existing) {
+            val newRecord = TransferRecord(
+                id = update.id,
+                fileName = update.fileName,
+                fileSizeBytes = update.fileSizeBytes,
+                direction = TransferDirection.RECEIVING,
+                progress = update.progress,
+                status = update.status,
+                peerName = update.sender,
+                errorMessage = update.errorMessage
+            )
+            _uiState.update {
+                it.copy(
+                    transfers = listOf(newRecord) + it.transfers,
+                    transfersState = ContentState.Populated,
+                    selectedTab = LanBridgeTab.Transfers
+                )
+            }
+        } else {
+            _uiState.update { state ->
+                state.copy(
+                    transfers = state.transfers.map { record ->
+                        if (record.id == update.id) {
+                            record.copy(
+                                progress = update.progress,
+                                status = update.status,
+                                errorMessage = update.errorMessage
+                            )
+                        } else {
+                            record
+                        }
+                    }
+                )
+            }
+        }
+
+        when (update.status) {
+            TransferStatus.COMPLETED -> pushMessage("Received ${update.fileName} from ${update.sender}")
+            TransferStatus.FAILED -> pushMessage("Receive failed: ${update.errorMessage ?: "Unknown error"}")
+            else -> Unit
+        }
+    }
+
     private fun updateTransferProgress(transferId: String, progress: Float) {
         val sanitized = progress.coerceIn(0f, 1f)
         _uiState.update { state ->
@@ -199,6 +264,7 @@ class LanBridgeViewModel {
     }
 
     fun close() {
+        transferServerManager.stop()
         transferManager.close()
         discoveryManager.close()
         scope.cancel()
@@ -214,7 +280,7 @@ data class LanBridgeUiState(
     val settingsState: ContentState = ContentState.Populated,
     val statusBanner: String,
     val deviceName: String,
-    val saveLocation: String = "~/LanBridge",
+    val saveLocation: String,
     val autoAcceptTransfers: Boolean = true,
     val forceDarkTheme: Boolean = false
 )

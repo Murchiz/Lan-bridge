@@ -93,7 +93,7 @@ private fun LanBridgeScreen(
                 title = { Text(text = "LanBridge") },
                 actions = {
                     Text(
-                        text = "Phase 3",
+                        text = "Phase 4",
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
