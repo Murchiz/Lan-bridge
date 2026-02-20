@@ -5,9 +5,11 @@ import com.lanbridge.model.TransferMetadata
 import com.lanbridge.model.TransferResponse
 import com.lanbridge.model.TransferStatus
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.forEachPart
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
-import io.ktor.server.engine.ApplicationEngine
+import io.ktor.server.cio.CIOApplicationEngine
+import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveMultipart
@@ -24,7 +26,7 @@ import kotlin.random.Random
 
 class TransferServerManager {
     private val json = Json { ignoreUnknownKeys = true }
-    private var server: ApplicationEngine? = null
+    private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
     private val _incomingTransfers = MutableSharedFlow<IncomingTransferUpdate>(extraBufferCapacity = 64)
     val incomingTransfers = _incomingTransfers.asSharedFlow()
@@ -73,7 +75,7 @@ class TransferServerManager {
                             }
                             else -> Unit
                         }
-                        part.dispose()
+                        part.dispose.invoke()
                     }
 
                     val finalMetadata = metadata
