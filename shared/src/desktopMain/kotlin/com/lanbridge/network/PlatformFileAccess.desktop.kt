@@ -3,6 +3,7 @@ package com.lanbridge.network
 import com.lanbridge.model.SelectedFileMeta
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.awt.Desktop
 import java.io.File
 import java.nio.file.Files
 
@@ -50,6 +51,22 @@ actual object PlatformFileAccess {
     }
 
     actual fun defaultSaveDirectory(): String = File(System.getProperty("user.home"), "LanBridge").absolutePath
+
+    actual fun openFile(path: String): Result<Unit> {
+        return runCatching {
+            val file = File(path)
+            require(file.exists()) { "File does not exist" }
+            Desktop.getDesktop().open(file)
+        }
+    }
+
+    actual fun openFolder(path: String): Result<Unit> {
+        return runCatching {
+            val folder = File(path)
+            require(folder.exists()) { "Folder does not exist" }
+            Desktop.getDesktop().open(folder)
+        }
+    }
 
     private fun uniqueDestination(dir: File, name: String): File {
         val base = File(dir, name)
