@@ -1,5 +1,6 @@
 package com.lanbridge.network
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
@@ -71,6 +72,32 @@ actual object PlatformFileAccess {
     actual fun defaultSaveDirectory(): String {
         val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         return File(downloads, "LanBridge").absolutePath
+    }
+
+    actual fun openFile(path: String): Result<Unit> {
+        return runCatching {
+            val context = AndroidContextHolder.appContext
+                ?: error("Android context not initialized")
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse(path)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    actual fun openFolder(path: String): Result<Unit> {
+        return runCatching {
+            val context = AndroidContextHolder.appContext
+                ?: error("Android context not initialized")
+            val uri = Uri.fromFile(File(path))
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "resource/folder")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
     }
 
     private fun uniqueDestination(dir: File, name: String): File {

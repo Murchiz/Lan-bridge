@@ -7,4 +7,6 @@ expect object PlatformFileAccess {
     suspend fun readBytes(fileReference: String): Result<ByteArray>
     suspend fun saveIncomingFile(fileName: String, data: ByteArray): Result<String>
     fun defaultSaveDirectory(): String
+    fun openFile(path: String): Result<Unit>
+    fun openFolder(path: String): Result<Unit>
 }

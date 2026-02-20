@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -58,6 +61,7 @@ import com.lanbridge.viewmodel.ContentState
 import com.lanbridge.viewmodel.LanBridgeTab
 import com.lanbridge.viewmodel.LanBridgeViewModel
 import com.lanbridge.viewmodel.progressText
+import com.lanbridge.viewmodel.speedText
 
 @Composable
 fun LanBridgeRoot(
@@ -93,7 +97,7 @@ private fun LanBridgeScreen(
                 title = { Text(text = "LanBridge") },
                 actions = {
                     Text(
-                        text = "Phase 4",
+                        text = "Phase 5",
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
@@ -152,8 +156,14 @@ private fun LanBridgeScreen(
                 LanBridgeTab.Transfers -> TransfersTab(
                     state = uiState.transfersState,
                     transfers = uiState.transfers,
+                    activeTransferId = uiState.activeTransferId,
                     onStateChange = viewModel::setTransfersState,
-                    onActionMessage = viewModel::pushMessage
+                    onActionMessage = viewModel::pushMessage,
+                    onRetryTransfer = viewModel::retryTransfer,
+                    onCancelTransfer = viewModel::cancelTransfer,
+                    onOpenFile = viewModel::openTransferFile,
+                    onOpenFolder = viewModel::openTransferFolder,
+                    onClearHistory = viewModel::clearTransferHistory
                 )
 
                 LanBridgeTab.Settings -> SettingsTab(
@@ -247,17 +257,44 @@ private fun ManualDeviceDialog(onDismiss: () -> Unit, onAdd: (String, String) ->
 private fun TransfersTab(
     state: ContentState,
     transfers: List<TransferRecord>,
+    activeTransferId: String?,
     onStateChange: (ContentState) -> Unit,
-    onActionMessage: (String) -> Unit
+    onActionMessage: (String) -> Unit,
+    onRetryTransfer: (String) -> Unit,
+    onCancelTransfer: (String) -> Unit,
+    onOpenFile: (String) -> Unit,
+    onOpenFolder: (String) -> Unit,
+    onClearHistory: () -> Unit
 ) {
     ContentStateSwitcher(current = state, onStateChange = onStateChange)
+    val completed = transfers.count { it.status == TransferStatus.COMPLETED }
+    val failed = transfers.count { it.status == TransferStatus.FAILED }
+    val queued = transfers.count { it.status == TransferStatus.QUEUED }
+    Text("Summary: $completed completed • $failed failed • $queued queued")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = onClearHistory) { Text("Clear history") }
+        if (activeTransferId != null) {
+            OutlinedButton(onClick = { onCancelTransfer(activeTransferId) }) {
+                Text("Cancel active")
+            }
+        }
+    }
+
     when (state) {
         ContentState.Loading -> LoadingState("Loading transfer history...")
         ContentState.Empty -> EmptyState("No transfers yet")
         ContentState.Error -> ErrorState("Failed to load transfers")
         ContentState.Populated -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(transfers, key = { it.id }) { transfer ->
-                TransferCard(transfer = transfer, onActionMessage = onActionMessage)
+                TransferCard(
+                    transfer = transfer,
+                    isActive = transfer.id == activeTransferId,
+                    onActionMessage = onActionMessage,
+                    onRetryTransfer = onRetryTransfer,
+                    onCancelTransfer = onCancelTransfer,
+                    onOpenFile = onOpenFile,
+                    onOpenFolder = onOpenFolder
+                )
             }
         }
     }
@@ -312,7 +349,7 @@ private fun SettingsTab(
                         Switch(checked = forceDarkTheme, onCheckedChange = { onThemeToggle() })
                     }
                     HorizontalDivider()
-                    Text("LanBridge v0.3.0", style = MaterialTheme.typography.labelLarge)
+                    Text("LanBridge v0.5.0", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -338,23 +375,58 @@ private fun DeviceCard(device: Device, onSendClick: () -> Unit) {
 }
 
 @Composable
-private fun TransferCard(transfer: TransferRecord, onActionMessage: (String) -> Unit) {
+private fun TransferCard(
+    transfer: TransferRecord,
+    isActive: Boolean,
+    onActionMessage: (String) -> Unit,
+    onRetryTransfer: (String) -> Unit,
+    onCancelTransfer: (String) -> Unit,
+    onOpenFile: (String) -> Unit,
+    onOpenFolder: (String) -> Unit
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(transfer.fileName, style = MaterialTheme.typography.titleMedium)
-            Text("${transfer.peerName} • ${transfer.progressText()}")
+            Text("${transfer.peerName} • ${transfer.progressText()} • ${transfer.speedText()}")
             LinearProgressIndicator(progress = { transfer.progress }, modifier = Modifier.fillMaxWidth())
             Text("${transfer.fileSizeBytes} bytes")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(statusIcon(transfer.status), contentDescription = null)
                 Text(transfer.status.name.lowercase())
+                if (isActive) {
+                    AssistChip(onClick = {}, label = { Text("active") })
+                }
             }
             if (!transfer.errorMessage.isNullOrBlank()) {
                 Text(transfer.errorMessage, color = MaterialTheme.colorScheme.error)
             }
-            if (transfer.status == TransferStatus.FAILED) {
-                OutlinedButton(onClick = { onActionMessage("Retry support is coming in Phase 5") }) {
-                    Text("Retry")
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (transfer.status == TransferStatus.FAILED) {
+                    OutlinedButton(onClick = { onRetryTransfer(transfer.id) }) {
+                        Text("Retry")
+                    }
+                }
+                if (transfer.status == TransferStatus.QUEUED || transfer.status == TransferStatus.IN_PROGRESS) {
+                    OutlinedButton(onClick = { onCancelTransfer(transfer.id) }) {
+                        Icon(Icons.Filled.Cancel, contentDescription = null)
+                        Text("Cancel")
+                    }
+                }
+                if (transfer.status == TransferStatus.COMPLETED && !transfer.savedPath.isNullOrBlank()) {
+                    OutlinedButton(onClick = { onOpenFile(transfer.id) }) {
+                        Icon(Icons.Filled.InsertDriveFile, contentDescription = null)
+                        Text("Open file")
+                    }
+                    OutlinedButton(onClick = { onOpenFolder(transfer.id) }) {
+                        Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                        Text("Open folder")
+                    }
+                }
+                if (transfer.status == TransferStatus.CANCELLED) {
+                    OutlinedButton(onClick = { onActionMessage("Transfer cancelled") }) {
+                        Text("Dismiss")
+                    }
                 }
             }
         }
