@@ -75,7 +75,7 @@ class TransferServerManager {
                             }
                             else -> Unit
                         }
-                        part.dispose.invoke()
+                        part.dispose()
                     }
 
                     val finalMetadata = metadata

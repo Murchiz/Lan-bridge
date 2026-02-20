@@ -4,7 +4,6 @@ build/
 
 # Gradle
 .gradle/
-!gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
 
 # IDE
@@ -20,3 +19,6 @@ Thumbs.db
 *.class
 *.log
 *.tmp
+
+# Archives
+*.jar
